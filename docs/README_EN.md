@@ -5,9 +5,10 @@ Benchmark download speed across GitHub mirrors to find the fastest one for your 
 ## Features
 
 - Tests multiple popular GitHub mirrors with live progress
-- Measures **time-to-first-byte (latency)**, staged download times, and **throughput (MB/s)**
+- Measures **time-to-first-byte (latency)**, staged download times, and per-stage **throughput (MB/s)**
 - Ranks mirrors by speed
 - Supports custom mirrors and per-run file targets
+- Writes a Markdown table report to `outputs/` after each run
 - Clean terminal output via [Rich](https://github.com/Textualize/rich)
 
 ## Installation
@@ -25,6 +26,8 @@ uv sync
 ```bash
 # Run benchmark with default settings
 uv run python main.py run
+
+# Each run writes outputs/benchmark-YYYYMMDD-HHMMSS.md
 
 # Use a larger fake example file for more accurate throughput measurement
 uv run python main.py run --file /example-owner/example-repo/releases/download/v0.0.0/example.bin
@@ -52,6 +55,8 @@ uv run python main.py list
 | github.com (official) | <https://github.com> |
 | gh-proxy.com | <https://gh-proxy.com> |
 | ghfast.top | <https://ghfast.top> |
+| gh.ddlc.top | <https://gh.ddlc.top> |
+| gh.llkk.cc | <https://gh.llkk.cc> |
 | ghproxy.net | <https://ghproxy.net> |
 | moeyy.cn | <https://gh.moeyy.cn> |
 | github.akams.cn | <https://github.akams.cn> |
@@ -59,6 +64,7 @@ uv run python main.py list
 | bgithub.xyz | <https://bgithub.xyz> |
 | dgithub.xyz | <https://dgithub.xyz> |
 | githubfast.com | <https://githubfast.com> |
+| hub.gitmirror.com | <https://hub.gitmirror.com> |
 | hub.nuaa.cf | <https://hub.nuaa.cf> |
 
 ## Options
@@ -70,4 +76,4 @@ uv run python main.py list
 | `--endurance` | `30000` | Maximum download duration per mirror in milliseconds |
 | `--mirror NAME=URL` | - | Add extra mirror (repeatable) |
 | `--only NAME` | - | Limit to named mirror(s) (repeatable) |
-| `--no-speed-mbps` | - | Hide throughput and skip MB/s calculation |
+| `--show-speed-mbps / --no-speed-mbps` | `true` | Show or hide throughput columns and MB/s calculation |

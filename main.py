@@ -6,6 +6,7 @@ import os
 import time
 import warnings
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -62,10 +63,13 @@ MIRRORS: dict[str, str] = {
     "bgithub.xyz": "https://bgithub.xyz",
     "dgithub.xyz": "https://dgithub.xyz",
     "githubfast.com": "https://githubfast.com",
+    "hub.gitmirror.com": "https://hub.gitmirror.com",
     "hub.nuaa.cf": "https://hub.nuaa.cf",
     # Proxy mirrors (prepend base to full github URL)
     "gh-proxy.com": "https://gh-proxy.com/https://github.com",
     "ghfast.top": "https://ghfast.top/https://github.com",
+    "gh.ddlc.top": "https://gh.ddlc.top/https://github.com",
+    "gh.llkk.cc": "https://gh.llkk.cc/https://github.com",
     "ghproxy.net": "https://ghproxy.net/https://github.com",
     "moeyy.cn": "https://gh.moeyy.cn/https://github.com",
     "github.akams.cn": "https://github.akams.cn/https://github.com",
@@ -79,6 +83,7 @@ BENCH_FILE_PATH = os.getenv(
 )
 DEFAULT_TIMEOUT_MS = 10_000
 DEFAULT_ENDURANCE_MS = 30_000
+OUTPUTS_DIR = Path("outputs")
 
 
 # ---------------------------------------------------------------------------
@@ -93,9 +98,11 @@ class MirrorResult:
     status: Optional[int] = None
     ttfb_ms: Optional[float] = None  # time-to-first-byte
     t1k_ms: Optional[float] = None  # time to receive 1 KB
+    speed_1k_mbps: Optional[float] = None  # throughput at 1 KB
     t1000k_ms: Optional[float] = None  # time to receive 1000 KiB
+    speed_1000k_mbps: Optional[float] = None  # throughput at 1000 KiB
     t10mib_ms: Optional[float] = None  # time to receive 10 MiB
-    speed_mbps: Optional[float] = None  # throughput over full download
+    speed_10mib_mbps: Optional[float] = None  # throughput at 10 MiB
     bytes_downloaded: int = 0
     error: Optional[str] = None
 
@@ -136,17 +143,27 @@ def _benchmark_mirror(
                     elapsed_ms = (time.perf_counter() - t_start) * 1000
                     if result.t1k_ms is None and downloaded >= target_1k:
                         result.t1k_ms = elapsed_ms
+                        result.speed_1k_mbps = _bytes_per_ms_to_mibps(
+                            downloaded, elapsed_ms
+                        )
                     if result.t1000k_ms is None and downloaded >= target_1000k:
                         result.t1000k_ms = elapsed_ms
+                        result.speed_1000k_mbps = _bytes_per_ms_to_mibps(
+                            downloaded, elapsed_ms
+                        )
                     if result.t10mib_ms is None and downloaded >= target_10mib:
                         result.t10mib_ms = elapsed_ms
+                        result.speed_10mib_mbps = _bytes_per_ms_to_mibps(
+                            downloaded, elapsed_ms
+                        )
                         break
                     if elapsed_ms >= endurance_ms:
                         break
-                elapsed = time.perf_counter() - t_start
                 result.bytes_downloaded = downloaded
-                if speed_mbps and elapsed > 0:
-                    result.speed_mbps = (downloaded / elapsed) / (1024 * 1024)
+                if not speed_mbps:
+                    result.speed_1k_mbps = None
+                    result.speed_1000k_mbps = None
+                    result.speed_10mib_mbps = None
     except httpx.TimeoutException:
         result.error = "timeout"
     except httpx.ConnectError as exc:
@@ -173,6 +190,12 @@ def _ms_str(ms: Optional[float]) -> str:
     return "—" if ms is None else f"{ms:.0f} ms"
 
 
+def _bytes_per_ms_to_mibps(byte_count: int, elapsed_ms: float) -> Optional[float]:
+    if elapsed_ms <= 0:
+        return None
+    return (byte_count / (elapsed_ms / 1000)) / (1024 * 1024)
+
+
 def _speed_str(mbps: Optional[float]) -> str:
     if mbps is None:
         return "—"
@@ -181,23 +204,42 @@ def _speed_str(mbps: Optional[float]) -> str:
     return f"{mbps * 1024:.1f} KB/s"
 
 
+def _sorted_results(results: list[MirrorResult]) -> list[MirrorResult]:
+    return sorted(
+        results,
+        key=lambda r: r.t10mib_ms if r.t10mib_ms is not None else float("inf"),
+    )
+
+
+def _validate_mirror_names(
+    ctx: click.Context,
+    param: click.Parameter,
+    values: tuple[str, ...],
+) -> tuple[str, ...]:
+    for value in values:
+        if value.startswith("-"):
+            raise click.BadParameter(
+                f"missing mirror name before {value!r}", ctx=ctx, param=param
+            )
+    return values
+
+
 def _render_table(results: list[MirrorResult], show_speed_mbps: bool) -> None:
     table = Table(title="GitHub Mirror Benchmark Results", show_lines=True)
     table.add_column("Mirror", style="cyan", no_wrap=True)
     table.add_column("Status", justify="center")
     table.add_column("TTFB", justify="right")
     table.add_column("1 KB", justify="right")
+    if show_speed_mbps:
+        table.add_column("Speed", justify="right", min_width=8)
     table.add_column("1000 KiB", justify="right")
+    if show_speed_mbps:
+        table.add_column("Speed", justify="right", min_width=8)
     table.add_column("10 MiB", justify="right")
     if show_speed_mbps:
-        table.add_column("Speed", justify="right")
+        table.add_column("Speed", justify="right", min_width=8)
 
-    sorted_results = sorted(
-        results,
-        key=lambda r: r.t10mib_ms if r.t10mib_ms is not None else float("inf"),
-    )
-
-    for r in sorted_results:
+    for r in _sorted_results(results):
         status_cell = (
             f"[green]{r.status}[/green]"
             if r.ok
@@ -208,14 +250,80 @@ def _render_table(results: list[MirrorResult], show_speed_mbps: bool) -> None:
             status_cell,
             _ms_str(r.ttfb_ms),
             _ms_str(r.t1k_ms),
-            _ms_str(r.t1000k_ms),
-            _ms_str(r.t10mib_ms),
         ]
         if show_speed_mbps:
-            row.append(_speed_str(r.speed_mbps))
+            row.append(_speed_str(r.speed_1k_mbps))
+        row.append(_ms_str(r.t1000k_ms))
+        if show_speed_mbps:
+            row.append(_speed_str(r.speed_1000k_mbps))
+        row.append(_ms_str(r.t10mib_ms))
+        if show_speed_mbps:
+            row.append(_speed_str(r.speed_10mib_mbps))
         table.add_row(*row)
 
     console.print(table)
+
+
+def _md_cell(value: object) -> str:
+    text = str(value).replace("|", "\\|").replace("\n", " ")
+    return text or "—"
+
+
+def _write_markdown_report(
+    results: list[MirrorResult],
+    file_path: str,
+    timeout_ms: int,
+    endurance_ms: int,
+    show_speed_mbps: bool,
+) -> Path:
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    generated_at = datetime.now().astimezone()
+    report_path = OUTPUTS_DIR / f"benchmark-{generated_at:%Y%m%d-%H%M%S}.md"
+
+    headers = ["Mirror", "Status", "TTFB", "1 KB"]
+    if show_speed_mbps:
+        headers.append("1 KB Speed")
+    headers.append("1000 KiB")
+    if show_speed_mbps:
+        headers.append("1000 KiB Speed")
+    headers.append("10 MiB")
+    if show_speed_mbps:
+        headers.append("10 MiB Speed")
+    headers.append("Bytes Downloaded")
+
+    lines = [
+        "# GitHub Mirror Benchmark Report",
+        "",
+        f"- Generated: {generated_at.isoformat(timespec='seconds')}",
+        f"- File: `{file_path}`",
+        f"- Timeout: {timeout_ms} ms",
+        f"- Endurance: {endurance_ms} ms",
+        "",
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
+
+    for result in _sorted_results(results):
+        status = str(result.status) if result.ok else str(result.error or result.status)
+        row = [
+            result.name,
+            status,
+            _ms_str(result.ttfb_ms),
+            _ms_str(result.t1k_ms),
+        ]
+        if show_speed_mbps:
+            row.append(_speed_str(result.speed_1k_mbps))
+        row.append(_ms_str(result.t1000k_ms))
+        if show_speed_mbps:
+            row.append(_speed_str(result.speed_1000k_mbps))
+        row.append(_ms_str(result.t10mib_ms))
+        if show_speed_mbps:
+            row.append(_speed_str(result.speed_10mib_mbps))
+        row.append(str(result.bytes_downloaded))
+        lines.append("| " + " | ".join(_md_cell(value) for value in row) + " |")
+
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return report_path
 
 
 # ---------------------------------------------------------------------------
@@ -260,12 +368,14 @@ def cli() -> None:
     "only_mirrors",
     multiple=True,
     metavar="NAME",
+    callback=_validate_mirror_names,
     help="Only benchmark the named mirror(s) from the built-in list.",
 )
 @click.option(
-    "--no-speed-mbps",
-    is_flag=True,
-    help="Hide the throughput column and skip MB/s calculation.",
+    "--show-speed-mbps/--no-speed-mbps",
+    default=True,
+    show_default=True,
+    help="Show or hide throughput columns and MB/s calculation.",
 )
 def run(
     file_path: str,
@@ -273,7 +383,7 @@ def run(
     endurance: int,
     extra_mirrors: tuple[str, ...],
     only_mirrors: tuple[str, ...],
-    no_speed_mbps: bool,
+    show_speed_mbps: bool,
 ) -> None:
     """Run the benchmark: measure time to download 1 KB, 1000 KiB, and 10 MiB."""
     mirrors = dict(MIRRORS)
@@ -312,12 +422,16 @@ def run(
         for name, base_url in mirrors.items():
             progress.update(task, description=f"Testing [cyan]{name}[/cyan]…")
             result = _benchmark_mirror(
-                name, base_url, file_path, timeout, endurance, not no_speed_mbps
+                name, base_url, file_path, timeout, endurance, show_speed_mbps
             )
             results.append(result)
             progress.advance(task)
 
-    _render_table(results, show_speed_mbps=not no_speed_mbps)
+    _render_table(results, show_speed_mbps=show_speed_mbps)
+    report_path = _write_markdown_report(
+        results, file_path, timeout, endurance, show_speed_mbps=show_speed_mbps
+    )
+    console.print(f"\n[green]Markdown report written:[/green] [dim]{report_path}[/dim]")
 
 
 @cli.command("list")

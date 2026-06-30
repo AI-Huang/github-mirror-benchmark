@@ -8,8 +8,9 @@ English documentation: [docs/README_EN.md](docs/README_EN.md)
 
 - 内置多个常见 GitHub 镜像源，并带有实时进度显示
 - 测量首字节时间、1 KB、1000 KiB、10 MiB 阶段下载时间
-- 可选显示吞吐速度，便于比较不同镜像的实际下载表现
+- 可选在 1 KB、1000 KiB、10 MiB 阶段耗时后显示对应下载速度
 - 支持临时指定 benchmark 文件路径、额外镜像和只测试指定镜像
+- 每次运行会在 `outputs/` 下生成 Markdown 表格报告
 - 使用 [Rich](https://github.com/Textualize/rich) 输出清晰的终端表格
 
 ## 安装
@@ -27,6 +28,8 @@ uv sync
 ```bash
 # 使用默认配置运行测速
 uv run python main.py run
+
+# 运行结束后会生成 outputs/benchmark-YYYYMMDD-HHMMSS.md 报告
 
 # 使用一个假的示例路径覆盖本次测速文件
 uv run python main.py run --file /example-owner/example-repo/releases/download/v0.0.0/example.bin
@@ -64,6 +67,8 @@ BENCH_FILE_PATH=/example-owner/example-repo/releases/download/v0.0.0/example.bin
 | github.com (official) | <https://github.com> |
 | gh-proxy.com | <https://gh-proxy.com> |
 | ghfast.top | <https://ghfast.top> |
+| gh.ddlc.top | <https://gh.ddlc.top> |
+| gh.llkk.cc | <https://gh.llkk.cc> |
 | ghproxy.net | <https://ghproxy.net> |
 | moeyy.cn | <https://gh.moeyy.cn> |
 | github.akams.cn | <https://github.akams.cn> |
@@ -71,6 +76,7 @@ BENCH_FILE_PATH=/example-owner/example-repo/releases/download/v0.0.0/example.bin
 | bgithub.xyz | <https://bgithub.xyz> |
 | dgithub.xyz | <https://dgithub.xyz> |
 | githubfast.com | <https://githubfast.com> |
+| hub.gitmirror.com | <https://hub.gitmirror.com> |
 | hub.nuaa.cf | <https://hub.nuaa.cf> |
 
 ## 选项
@@ -82,4 +88,4 @@ BENCH_FILE_PATH=/example-owner/example-repo/releases/download/v0.0.0/example.bin
 | `--endurance` | `30000` | 单个镜像最长下载时长，单位毫秒 |
 | `--mirror NAME=URL` | - | 添加额外镜像，可重复传入 |
 | `--only NAME` | - | 只测试指定名称的内置镜像，可重复传入 |
-| `--no-speed-mbps` | - | 隐藏吞吐速度列，并跳过 MB/s 计算 |
+| `--show-speed-mbps / --no-speed-mbps` | `true` | 显示或隐藏吞吐速度列和 MB/s 计算 |
