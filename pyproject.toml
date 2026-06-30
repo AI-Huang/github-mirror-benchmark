@@ -1,0 +1,15 @@
+[project]
+name = "github-mirror-benchmark"
+version = "0.1.0"
+description = "Benchmark download speed across GitHub mirrors"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.4.2",
+    "httpx>=0.28.1",
+    "requests>=2.34.2",
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+github-mirror-benchmark = "main:cli"
