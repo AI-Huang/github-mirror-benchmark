@@ -1,18 +1,20 @@
 # github-mirror-benchmark
 
-Benchmark download speed across GitHub mirrors to find the fastest one for your location.
+面向国内网络环境的 GitHub 镜像测速工具，用于快速比较多个 GitHub 镜像的下载响应和阶段性下载耗时。
 
-## Features
+English documentation: [docs/README_EN.md](docs/README_EN.md)
 
-- Tests multiple popular GitHub mirrors with live progress
-- Measures **time-to-first-byte (latency)**, staged download times, and **throughput (MB/s)**
-- Ranks mirrors by speed
-- Supports custom mirrors and per-run file targets
-- Clean terminal output via [Rich](https://github.com/Textualize/rich)
+## 功能
 
-## Installation
+- 内置多个常见 GitHub 镜像源，并带有实时进度显示
+- 测量首字节时间、1 KB、1000 KiB、10 MiB 阶段下载时间
+- 可选显示吞吐速度，便于比较不同镜像的实际下载表现
+- 支持临时指定 benchmark 文件路径、额外镜像和只测试指定镜像
+- 使用 [Rich](https://github.com/Textualize/rich) 输出清晰的终端表格
 
-Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).
+## 安装
+
+需要 Python >= 3.11 和 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
 git clone <repo-url>
@@ -20,34 +22,44 @@ cd github-mirror-benchmark
 uv sync
 ```
 
-## Usage
+## 使用
 
 ```bash
-# Run benchmark with default settings
+# 使用默认配置运行测速
 uv run python main.py run
 
-# Use a larger file for more accurate throughput measurement
-uv run python main.py run --file /torvalds/linux/archive/refs/tags/v6.9.tar.gz
+# 使用一个假的示例路径覆盖本次测速文件
+uv run python main.py run --file /example-owner/example-repo/releases/download/v0.0.0/example.bin
 
-# Hide throughput and only show staged download times
+# 不显示吞吐速度，只看阶段下载时间
 uv run python main.py run --no-speed-mbps
 
-# Test only specific mirrors
+# 只测试指定镜像
 uv run python main.py run --only "github.com (official)" --only "ghproxy.com"
 
-# Add a custom mirror
+# 临时添加自定义镜像
 uv run python main.py run --mirror "my-mirror=https://my.proxy.example.com/https://github.com"
 
-# Adjust timeout and per-mirror endurance (milliseconds)
+# 调整请求超时和单镜像最长下载时长，单位都是毫秒
 uv run python main.py run --timeout 10000 --endurance 30000
 
-# List all built-in mirrors
+# 查看内置镜像列表
 uv run python main.py list
 ```
 
-## Built-in Mirrors
+## 配置 benchmark 文件
 
-| Name | Base URL |
+默认 benchmark 文件路径从 `.env` 里的 `BENCH_FILE_PATH` 读取。本仓库不会提交 `.env`，请按自己的网络环境和目标文件在本地配置。
+
+```env
+BENCH_FILE_PATH=/example-owner/example-repo/releases/download/v0.0.0/example.bin
+```
+
+代码和文档中的路径使用 fake example path；实际可访问的测试文件请只放在本地 `.env` 或命令行参数里。
+
+## 内置镜像
+
+| 名称 | 基础 URL |
 | --- | --- |
 | github.com (official) | <https://github.com> |
 | gh-proxy.com | <https://gh-proxy.com> |
@@ -61,13 +73,13 @@ uv run python main.py list
 | githubfast.com | <https://githubfast.com> |
 | hub.nuaa.cf | <https://hub.nuaa.cf> |
 
-## Options
+## 选项
 
-| Option | Default | Description |
+| 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `--file` | `BENCH_FILE_PATH` from `.env` | File path relative to mirror root |
-| `--timeout` | `10000` | Request timeout in milliseconds |
-| `--endurance` | `30000` | Maximum download duration per mirror in milliseconds |
-| `--mirror NAME=URL` | — | Add extra mirror (repeatable) |
-| `--only NAME` | — | Limit to named mirror(s) (repeatable) |
-| `--no-speed-mbps` | — | Hide throughput and skip MB/s calculation |
+| `--file` | `.env` 中的 `BENCH_FILE_PATH` | 相对 GitHub 根路径的 benchmark 文件路径 |
+| `--timeout` | `10000` | 单个镜像请求超时时间，单位毫秒 |
+| `--endurance` | `30000` | 单个镜像最长下载时长，单位毫秒 |
+| `--mirror NAME=URL` | - | 添加额外镜像，可重复传入 |
+| `--only NAME` | - | 只测试指定名称的内置镜像，可重复传入 |
+| `--no-speed-mbps` | - | 隐藏吞吐速度列，并跳过 MB/s 计算 |
